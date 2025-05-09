@@ -1,0 +1,655 @@
+---
+title: "Health and Migration Background in Germany - Data Analysis"
+author: Aike Myrzaibraimova
+date: " `r Sys.Date()`"
+output:
+  html_document:
+    code_folding: show
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: yes
+bibliography: h_m_b.bib
+csl: apa.csl
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(kableExtra)
+```
+
+# **INTRODUCTION**
+
+![](https://www.gesundheit.bremen.de/sixcms/media.php/172/thumbnails/Gesundheit%20und%20Migration.png.62408.png)
+
+The Migration Report by the Federal Commissioner for Migration,
+Refugees, and Integration (2010) proposes the following definition of
+"migration": "Migration is when a person relocates the center of their
+life. We speak of international migration when this happens across
+national borders. International migration to and from Germany includes
+immigration and emigration across the country's borders (external
+migration)."[@migratio
+
+In Germany, almost 20 % of the population have a migration background
+(i.e., have migrated themselves or are descendants of immigrants),
+totaling about 16 million individuals.[@statisti
+
+Individuals with a migration background may face higher health risks
+compared to the majority population without a migration
+background[@migrund]. However, it is not migration itself that leads to
+poorer health. Rather, it is the reasons and circumstances surrounding
+migration, as well as the living and working conditions of people with a
+migration background in Germany, that can contribute to worse health
+outcomes.
+
+People with a migration background face increased risks for certain
+health issues that are more rare in the German population, including:
+
+-   Deaths related to childbirth and the first year of life
+-   Tuberculosis and other infectious diseases
+-   Some rare hereditary metabolic disorders
+
+Additionally, people with a migration background are exposed to specific
+health risks that are not commonly experienced by Germans without a
+migration background, such as:
+
+-   Psychosocial stress due to separation from family
+-   Psychosocial stress due to xenophobia
+-   Political persecution or torture in their country of origin
+    [@migrund]
+
+Nonetheless, people with a migration background are not inherently
+'sicker' than Germans without a migration background. In fact, they
+often possess significant health-promoting resources. For instance,
+those who undertake the challenge of migration are often particularly
+healthy and active, exhibiting a so-called "healthy migrant effect". The
+"healthy migrant" effect can create an illusion of unusually good health
+among immigrants. Accurately accounting for this effect in data
+interpretation is challenging. For instance, the lower mortality rates
+from heart attacks among immigrants from southern and western
+Mediterranean regions could be attributed to the significantly lower
+heart attack mortality rates in their home countries compared to
+Germany, rather than any selection effects related to
+migration[@healthy].
+
+#**METHODOLOGY**
+
+## Data Source
+
+The German Socio-Economic Panel
+[(SOEP)](https://www.diw.de/documents/dokumentenarchiv/17/diw_01.c.604430.de/soep_flyer_2018_en.pdf)
+study provides extensive microdata for research in the social, economic,
+and behavioral sciences. Similar to a powerful telescope offering
+detailed views to researchers globally, SOEP serves as a crucial
+observatory for social phenomena. Its data support not only fundamental
+academic research but also social policy reports intended for a broader
+audience.
+
+[SOEP-Core](http://companion.soep.de/#), the main component of the
+Socio-Economic Panel, is based at the German Institute for Economic
+Research (DIW Berlin). It began in 1984 and was notably expanded in 1990
+to include East Germany's representative sample following German
+reunification, a feature that distinguishes SOEP among global household
+panel surveys. Since 1984, SOEP’s fieldwork organization, infas Institut
+für angewandte Sozialwissenschaften GmbH, has surveyed individuals from
+participating households. The data encompasses every household member,
+including Germans from both former East and West Germany, foreign
+residents, recent immigrants, and a new sample of refugees added in
+2016. Topics covered include household composition, education,
+occupational history, employment, earnings, health, and indicators of
+satisfaction.
+
+## Choice of Variables: Migration Background
+
+The following variables were chosen to represent Migration Background:
+
+1.  [ppathl/migback](https://paneldata.org/soep-core/datasets/ppathl/migback):
+    Migration background.
+2.  [ppathl/immiyear](https://paneldata.org/soep-core/datasets/ppathl/immiyear):
+    Year Moved to Germany.
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+# Variable 1
+migration_backgrounds <- c(
+  "1" = "no migration background",
+  "2" = "direct migration background",
+  "3" = "indirect migration background")
+# Without drop_na() 605,995 observations, with: same
+M1_MigBack <- read_dta("ppathl.dta", col_select = c(pid, syear, migback)) %>% 
+  filter(migback > -1) %>%
+  mutate(migback_description = migration_backgrounds[as.character(migback)]) %>% 
+  drop_na()
+
+# Variable 2
+M4_ImmiYear <- read_dta("ppathl.dta", col_select = c(pid, syear, immiyear)) %>% 
+  filter(immiyear > -1) %>% 
+  drop_na()
+```
+
+## Choice of Variables: Health
+
+The following variables were chosen to represent Health:
+
+1.  [ple0008](https://paneldata.org/soep-core/datasets/pl/ple0008):
+    Current Health.
+2.  [ple0072](https://paneldata.org/soep-core/datasets/pl/ple0072):
+    Number Of Doctor Visits Last Three Mths.
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+# Variable 1
+H1_StateOfHealth <- read_dta("pl.dta", col_select = c(pid, syear, ple0008)) %>% 
+  filter(ple0008 > -1) %>% 
+  drop_na() %>%
+  mutate(StateOfHealth = case_when(
+    ple0008 == 1 ~ "Very good",
+    ple0008 == 2 ~ "Good",
+    ple0008 == 3 ~ "Satisfactory",
+    ple0008 == 4 ~ "Less good",
+    ple0008 == 5 ~ "Poor"
+  ))
+
+# Variable 2
+H3_DoctorVisits <- read_dta("pl.dta", col_select = c(pid, syear, ple0072)) %>% 
+  filter(ple0072 > -1) %>% 
+  drop_na() 
+```
+
+## Data Sampling
+
+-   Variables chosen for the current analysis come from two datasets:
+    [pl](https://paneldata.org/soep-core/datasets/pl/) and
+    [ppathl](https://paneldata.org/soep-core/datasets/ppathl/).
+
+-   All variables chosen were filtered to not include invalid answers
+    (e.g. values equaling -1 to -8) and to not include missing values
+    (using the function `drop_na()`).
+
+-   Datasets used for analysis were created by merging the time-constant
+    information on individuals such as Never Changing Person ID (`pid`),
+    Gender (`sex`) and the time-varying information from individuals
+    such as survey Year (`syear`).
+
+-   For all years since 1984, the PPATHL dataset contains information on
+    all persons who have ever lived in a SOEP household when a survey
+    was conducted (i.e., all adult respondents as well as children under
+    17 years of age and household members who have never given an
+    interview). PPATHL is important in distinguishing research units
+    (persons), especially for longitudinal analysis.
+
+-   The PL dataset contains all variables from the individual
+    questionnaire for all waves. In addition, the individual-specific
+    data from the IAB-SOEP Migration Survey and IAB-BAMF-SOEP Refugee
+    Survey are integrated into the PL dataset.
+
+
+## Data Limitations
+
+-   Subjective Measures: The study includes subjective measures such as
+    job satisfaction and social isolation, which rely on individual
+    perceptions and self-reported data. These subjective measures are
+    inherently variable and influenced by personal experiences and
+    reporting biases. As a result, the findings related to these
+    measures may reflect individual viewpoints rather than objective
+    truths.
+
+-   Sampling Bias: The sample may not capture all demographic or
+    socio-economic groups equally. Variations in participation rates
+    among different groups could lead to sampling bias, affecting the
+    representativeness of the data and the accuracy of the conclusions
+    drawn.
+
+-   Missing Data: The dataset contains some variables with substantial
+    amounts of missing data or responses marked as invalid. These
+    missing values were excluded from the analysis to ensure accuracy.
+    However, this exclusion could introduce biases or limit the scope of
+    the findings, potentially affecting their generalizability and
+    robustness.
+
+## Data Analysis Techniques
+
+1.  Visualizations Between Variables: To gain a comprehensive
+    understanding of the relationships and patterns within the data, a
+    variety of visualizations were employed.
+
+2.  Descriptive Statistics: To summarize and describe the central
+    tendencies and dispersion of the data, several key descriptive
+    statistics were calculated. The mean provided the average value of
+    each variable, offering a general sense of the typical observation.
+    The median was used to identify the midpoint of the data
+    distribution, which is particularly useful for understanding the
+    center of the data, especially in the presence of outliers. The
+    standard deviation (sd) measured the variability or spread of the
+    data around the mean, offering insights into the consistency and
+    reliability of the observed values.
+
+3.  Statistical Tests: To test hypotheses and assess relationships
+    between variables, a range of statistical tests was applied. The
+    chi-square test was employed to examine the independence of
+    categorical variables, determining whether observed frequencies
+    deviated significantly from expected frequencies. Correlation
+    analysis was used to assess the strength and direction of linear
+    relationships between continuous variables, providing a measure of
+    how closely two variables move together.
+
+
+# **ANALYSIS**
+
+## Relationship 1: Current Health (ple0008) and Migration Background (migback) {.tabset}
+
+The analysis of Relationship 1 is going to attempt to discover and
+analyse any differences in self-reported health status between
+individuals with migration background and no mogration background.
+
+It is important to note that the data is based on self-reported health
+status, which can be subjective.
+
+### Descrtiptive Statistics
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+# Descriptive statistics for health states and migration background
+# Health Variable and MigBack
+md1_Health_MigBack <- inner_join(H1_StateOfHealth, M1_MigBack, by = c("pid", "syear")) %>% 
+  drop_na()
+
+md1_health_stats <- md1_Health_MigBack %>%
+  group_by(migback_description, StateOfHealth) %>%
+  summarise(Count = n(), .groups = 'drop') %>%
+  arrange(migback_description, StateOfHealth)%>%
+  group_by(migback_description) %>%
+  mutate(Percentage = Count / sum(Count) * 100) %>%
+  ungroup()
+
+kable(md1_health_stats, format = "html",
+      col.names = c("Migration Background", "Health State", "Count", "Percentage")) %>%
+  kable_styling(full_width = F, position = "left")
+```
+
+#### Comparison Across Groups:
+
+-   **"Good" Health**: The "indirect migration background" group has the
+    highest percentage of "Good" health (46.3%), followed by "no
+    migration background" (40.7%), and then "direct migration
+    background" (38.8%).
+-   **"Poor" Health**: The "direct migration background" group has the
+    highest percentage of "Poor" health (3.8%), followed by "no
+    migration background" (3.5%), and then "indirect migration
+    background" (1.6%).
+-   **"Very Good" Health**: The "no migration background" group has the
+    highest percentage of "Very good" health (9.7%), followed by
+    "indirect migration background" (22.2%), and then "direct migration
+    background" (18.2%).
+
+#### Possible Interpretations:
+
+-   The health gradient across migration backgrounds is not clear-cut.
+    While the "direct migration background" group still appears to be at
+    a slight disadvantage, particularly regarding "Poor" health, the "no
+    migration background" group doesn't consistently exhibit the best
+    health outcomes.
+
+-   The "indirect migration background" group stands out with the
+    highest percentage of "Good" health and the lowest percentages of
+    "Less good" and "Poor" health. This suggests potential protective
+    factors or advantages associated with this type of migration
+    background.
+
+-   **Potential Explanations for "Indirect Migration Background"
+    Advantage**:
+
+    -   Individuals with indirect migration backgrounds may have
+        different migration motivations or experiences compared to those
+        with direct migration backgrounds, which could influence their
+        health.
+    -   The process of adapting to a new culture and integrating into
+        society might differ for those with indirect migration
+        backgrounds, potentially leading to better health outcomes.
+
+### Chi-Squared Test Results
+
+The results of Pearson's Chi-squared test for the association between
+"Current Health" and "Migration Background" are as follows:
+
+-   **Chi-Squared Statistic (X-squared)**: `5967.6`
+-   **Degrees of Freedom (df)**: `8`
+-   **P-value**: `< 2.2e-16`
+
+The chi-squared statistic of `5967.6` reflects a significant difference
+between the observed and expected frequencies in the contingency table.
+A larger chi-squared value indicates a greater discrepancy from the null
+hypothesis, which assumes no association between the variables.
+
+The degrees of freedom for this test, calculated as
+$(\text{number of rows} - 1) \times (\text{number of columns} - 1)$, are
+$(3 - 1) \times (5 - 1) = 2 \times 4 = 8$. This is based on the 3
+migration background categories and 5 health status categories.
+
+The extremely small p-value of `< 2.2e-16` is much smaller than
+conventional significance levels (e.g., 0.05). This indicates a
+statistically significant association between health status and
+migration background. In other words, the distribution of health status
+categories is not independent of migration background categories; there
+is likely a meaningful relationship between them.
+
+While the chi-squared test confirms an association, it does not imply
+causation or reveal the direction or nature of the relationship.
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+md1_contingency_table <- table(md1_Health_MigBack$migback_description, md1_Health_MigBack$StateOfHealth)
+md1_prop_table <- prop.table(md1_contingency_table, margin = 1)
+
+md1_chisq_result <- chisq.test(md1_contingency_table)
+print(md1_chisq_result)
+```
+
+### Analysis by Gender: Direct Migration Background Health. Visualisation
+
+```{r, error=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+mig_backgrounds <- c(
+  "1" = "no migration background",
+  "2" = "direct migration background",
+  "3" = "indirect migration background")
+M1_Gendered_DirMigBack <- read_dta("ppathl.dta", col_select = c(pid, syear, migback, sex)) %>% 
+  filter(migback == 2) %>%  # Filter for direct migration background only
+  filter(sex > -1) %>% 
+  mutate(
+    migback_description = mig_backgrounds[as.character(migback)],
+    sex_description = ifelse(sex == 1, "Male", "Female")) %>% 
+  drop_na()
+
+M1_combined_data <- M1_Gendered_DirMigBack %>%
+  inner_join(H1_StateOfHealth, by = c("pid", "syear"))
+M1_combined_data_plot <- M1_combined_data %>%
+  mutate(StateOfHealth = factor(StateOfHealth, levels = c("Very good", "Good", "Satisfactory", "Less good", "Poor"), ordered = TRUE))
+
+M1_health_summary <- M1_combined_data_plot %>%
+  group_by(syear, sex_description, StateOfHealth) %>%
+  summarise(count = n(), .groups = 'drop')
+
+ggplot(M1_health_summary, aes(x = syear, y = count, color = sex_description, group = sex_description)) +
+  geom_line(size = 1) + 
+  facet_wrap(~ StateOfHealth, scales = "free_y", ncol=1) +
+  labs(
+    title = "State of Health by Gender for Individuals with Direct Migration Background Over the Years",
+    x = "Year",
+    y = "Count",
+    color = "Gender") +
+  ylim(0, 1500) + 
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10), 
+    legend.title = element_text(size = 8), 
+    legend.text = element_text(size = 8),  
+    legend.position = "bottom", 
+    legend.box = "horizontal", 
+    legend.margin = margin(t = 5))
+```
+
+#### Gender Comparisons
+
+-   **Females** consistently report slightly higher counts in the "Very
+    good" and "Good" health categories compared to males.
+-   **Males** have slightly higher counts in the "Less good" and "Poor"
+    categories.
+-   The differences between genders are relatively small but consistent
+    across the years.
+
+#### Specific Observations
+
+-   **"Satisfactory"** is the most common health status reported by both
+    genders, with counts remaining relatively stable over time.
+-   The **"Poor"** category has the lowest counts for both genders,
+    indicating that a relatively small proportion of individuals report
+    poor health.
+-   There is a slight increase in the **"Satisfactory"** category for
+    both genders towards the end of the period (closer to 2020).
+-   There is a slight decrease in the **"Less good"** category for both
+    genders towards the end of the period.
+
+#### Possible Interpretations
+
+-   The stable trends suggest that the overall health status of
+    individuals with a direct migration background has not changed
+    significantly over the 20 years studied.
+-   The slight gender differences may indicate that females tend to
+    perceive their health slightly more positively than males.
+-   The increase in the **"Satisfactory"** category and decrease in the
+    **"Less good"** category towards the end of the period could suggest
+    a slight improvement in overall health perception.
+
+### Analysis by Gender: No Migration Background Health. Visualisation
+
+```{r, error=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+mig_back <- c(
+  "1" = "no migration background",
+  "2" = "direct migration background",
+  "3" = "indirect migration background")
+M1_Gendered_NoMigBack <- read_dta("ppathl.dta", col_select = c(pid, syear, migback, sex)) %>% 
+  filter(migback == 1) %>%  # Filter for no migration background only
+  filter(sex > -1) %>% 
+  mutate(
+    migback_description = mig_back[as.character(migback)],
+    sex_description = ifelse(sex == 1, "Male", "Female")) %>% 
+  drop_na()
+
+M1_1_combined_data <- M1_Gendered_NoMigBack %>%
+  inner_join(H1_StateOfHealth, by = c("pid", "syear"))
+M1_1_combined_data_plot <- M1_1_combined_data %>%
+  mutate(StateOfHealth = factor(StateOfHealth, levels = c("Very good", "Good", "Satisfactory", "Less good", "Poor"), ordered = TRUE))
+
+M1_1_health_summary <- M1_1_combined_data_plot %>%
+  group_by(syear, sex_description, StateOfHealth) %>%
+  summarise(count = n(), .groups = 'drop')
+
+ggplot(M1_1_health_summary, aes(x = syear, y = count, color = sex_description, group = sex_description)) +
+  geom_line(size = 1) + 
+  facet_wrap(~ StateOfHealth, scales = "free_y", ncol=1) +
+  labs(
+    title = "State of Health by Gender for Individuals with No Migration Background Over the Years",
+    x = "Year",
+    y = "Count",
+    color = "Gender") +
+  ylim(0, 3000) + 
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10), 
+    legend.title = element_text(size = 8), 
+    legend.text = element_text(size = 8),  
+    legend.position = "bottom", 
+    legend.box = "horizontal", 
+    legend.margin = margin(t = 5))
+```
+
+Both graphs show a similar pattern of overall stability in health status
+across the 20 years for both genders, with no drastic fluctuations. The
+"Satisfactory" category remains the most prevalent health status for
+both genders, regardless of migration background. Similarly, the "Poor"
+health category consistently has the lowest counts in both populations.
+
+Both graphs reveal a consistent gender gap. Females tend to report
+better health more often ("Very good" and "Good"), while males have
+slightly higher counts in poorer health categories ("Less good" and
+"Poor").
+
+#### Key Differences
+
+-   **Higher "Very Good" & "Good" in No Migration Group:** Individuals
+    *without* a migration background report "Very good" and "Good"
+    health significantly more often than those *with* a migration
+    background. This gap is particularly noticeable in the "Very good"
+    category and is consistent across the timeline.
+-   **"Satisfactory" More Common with Migration:** The "Satisfactory"
+    category, while dominant in both groups, is notably more prevalent
+    among individuals with a migration background.
+-   **"Less Good" & "Poor" More Common with Migration:** Conversely, the
+    "Less good" and "Poor" categories, though still less frequent
+    overall, have consistently higher counts in the group with a
+    migration background.
+
+##  {.unnumbered}
+
+## Relationship 2. Doctor Visits (ple0072) by Migration Background (migback). {.tabset}
+
+By analyzing Relationship 2 we will investigate if individuals with and
+without migration backgrounds differ in their use of healthcare services
+(here, doctor visits in the last three months).
+
+### Visualisation
+
+```{r, message=FALSE, warning=FALSE, error=FALSE, fig.align='center'}
+# Healthcare Utilization with Migration Background
+md2_Healthcare_MigData <- merge(H3_DoctorVisits, M1_MigBack, by = c("pid", "syear"))
+# A boxplot
+ggplot(md2_Healthcare_MigData, aes(x = migback_description, y = ple0072, fill = migback_description)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1) +
+  labs(
+    title = "Distribution of Doctor Visits by Migration Background",
+    x = "Migration Background",
+    y = "Number of Doctor Visits"
+  ) +
+  theme_bw() +
+    theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text = element_text(size = 8), 
+    legend.title = element_text(size = 8), 
+    legend.text = element_text(size = 8),  
+    legend.position = "bottom", 
+    legend.box = "horizontal", 
+    legend.margin = margin(t = 5))
+```
+
+#### Key Observations
+
+1.  **Median Number of Visits:**
+    -   **Direct migration background:** The median number of doctor
+        visits appears to be the lowest among the three groups. The
+        median line within the box is closer to the bottom of the box.
+    -   **Indirect migration background and No migration background:**
+        These two groups seem to have a similar median number of visits,
+        with the median line located around the middle of their
+        respective boxes.
+2.  **Spread of the Data (Interquartile Range - IQR):**
+    -   **Direct migration background:** The IQR (the height of the box)
+        for this group is relatively small, suggesting that the middle
+        50% of individuals with a direct migration background have a
+        similar number of doctor visits.
+    -   **Indirect & No migration background:** Both of these groups
+        show a larger IQR compared to the direct migration background
+        group. This indicates more variability in the number of doctor
+        visits among individuals in these groups.
+3.  **Outliers:**
+    -   **All three groups** exhibit outliers, represented by the
+        individual points beyond the whiskers.
+    -   **Direct migration background:** While having the smallest IQR,
+        this group appears to have a few outliers on the higher end,
+        indicating some individuals with a direct migration background
+        have a notably high number of doctor visits.
+    -   **Indirect & No migration background:** These groups have a
+        number of outliers, particularly on the higher end, suggesting
+        some individuals within these groups visit doctors considerably
+        more frequently than others.
+
+#### Possible Interpretations
+
+-   Individuals with a direct migration background may tend to utilize
+    healthcare services (as measured by doctor visits) less frequently
+    compared to those with an indirect migration background or no
+    migration background.
+
+-   The presence of outliers highlights the importance of considering
+    individual circumstances and avoiding generalizations. There are
+    individuals within each group who deviate from the general trend,
+    potentially due to specific health conditions or other factors.
+
+### Descriptive Statistics
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+# Healthcare Utilization with Migration Background
+md2_Healthcare_MigData <- merge(H3_DoctorVisits, M1_MigBack, by = c("pid", "syear"))
+md2_descriptive_table <- md2_Healthcare_MigData %>%
+  group_by(migback_description) %>%
+  summarize(
+    Mean_Doctor_Visits = mean(ple0072, na.rm = TRUE),
+    SD_Doctor_Visits = sd(ple0072, na.rm = TRUE),
+    Count = n()
+  )
+kable(md2_descriptive_table, format = "html", 
+      col.names = c("Migration Background", "Mean Doctor Visits", "SD of Doctor Visits", "Count")) %>%
+  kable_styling(full_width = FALSE, position = "left")
+
+```
+
+#### Analysis Incorporating Descriptive Statistics
+
+1.  **Mean Doctor Visits:**
+    -   The table reveals that the mean number of doctor visits is
+        highest for those with no migration background (3.587), followed
+        by those with a direct migration background (3.561). The
+        indirect migration background group exhibits the lowest mean
+        (3.213).
+    -   This aligns with the boxplot's median observation, where the
+        direct migration group appeared to have the lowest median, and
+        the other two groups seemed comparable. However, the means
+        suggest that the "no migration background" group utilizes
+        healthcare services slightly more on average than the "direct
+        migration background" group.
+2.  **Standard Deviation (SD) of Doctor Visits:**
+    -   The "direct migration background" group, despite having the
+        lowest mean, shows a relatively high SD (4.611), indicating
+        greater dispersion around the mean. This aligns with the
+        outliers seen in the boxplot for this group, suggesting a wider
+        range of healthcare utilization behaviors.
+    -   The "indirect migration background" group has the lowest SD
+        (3.929), suggesting less variability in doctor visits compared
+        to the other two groups.
+    -   The "no migration background" group's SD (4.429) lies between
+        the other two, reinforcing the observation of moderate
+        variability in their healthcare utilization.
+
+#### Enhanced Interpretations
+
+-   **Direct vs. No Migration Background:** While the boxplot suggested
+    lower healthcare utilization for the "direct migration background"
+    group based on the median, the mean values indicate their usage is
+    closer to the "no migration background" group. The higher SD for the
+    "direct migration background" group further suggests a more diverse
+    range of healthcare-seeking behaviors within this group.
+
+-   **Indirect Migration Background:** The "indirect migration
+    background" group, with the lowest mean and SD, appears to have the
+    least frequent and most consistent pattern of doctor visits among
+    the three groups.
+
+# **CONCLUSION**
+
+Individuals with a migration background in Germany encounter unique
+health challenges stemming from their migration experiences and
+circumstances. However, it is essential to recognize that these
+individuals are not inherently less healthy. Addressing health
+challenges requires a nuanced understanding of the factors contributing
+to them and a focus on improving the living conditions and support
+systems for migrants in Germany.
+
+By running analysis on realtionship between different variables
+representing Health and Migration Background, we delved into a vast
+topic of "Migration and Health". Future studies could explore more
+granular aspects of how migration experiences impact health outcomes and
+identify effective strategies for improving migrant health. Such
+research could provide valuable insights for policymakers and healthcare
+providers, ultimately leading to better support systems and health
+outcomes for migrants in Germany and beyond.
+
+# **BIBILOGRAPHY**
+
